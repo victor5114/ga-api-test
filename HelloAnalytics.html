@@ -1,0 +1,159 @@
+<html>
+  <head></head>
+  <body>
+    <button id="signin-button" onclick="handleSignInClick()">Sign In</button>
+    <button id="signout-button" onclick="handleSignOutClick()">Sign Out</button>
+    <h1>Hello Analytics</h1>
+    <textarea cols="80" rows="20" id="query-output"></textarea>
+
+    <script type="text/javascript">
+      function handleClientLoad() {
+        // Loads the client library and the auth2 library together for efficiency.
+        // Loading the auth2 library is optional here since `gapi.client.init` function will load
+        // it if not already loaded. Loading it upfront can save one network request.
+        gapi.load('client:auth2', initClient);
+      }
+
+      function initClient() {
+        // Initialize the client with API key and People API, and initialize OAuth with an
+        // OAuth 2.0 client ID and scopes (space delimited string) to request access.
+        gapi.client.init({
+            //apiKey: 'YOUR_API_KEY',
+            //discoveryDocs: ["https://www.googleapis.com/auth/analytics.readonly"],
+            clientId: '<YOUR CLIENT ID>',
+            scope: 'https://www.googleapis.com/auth/analytics'
+        }).then(function () {
+          // Listen for sign-in state changes.
+          gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
+
+          // Handle the initial sign-in state.
+          updateSigninStatus(gapi.auth2.getAuthInstance().isSignedIn.get());
+        });
+      }
+
+      function updateSigninStatus(isSignedIn) {
+        console.log(isSignedIn);
+        // When signin status changes, this function is called.
+        // If the signin status is changed to signedIn, we make an API call.
+        if (isSignedIn) {
+          makeApiCall();
+        }
+      }
+
+      function handleSignInClick(event) {
+        // Ideally the button should only show up after gapi.client.init finishes, so that this
+        // handler won't be called before OAuth is initialized.
+        gapi.auth2.getAuthInstance().signIn();
+      }
+
+      function handleSignOutClick(event) {
+        gapi.auth2.getAuthInstance().disconnect();
+      }
+
+      function makeApiCall() {
+        // Make an API call to the People API, and print the user's given name.
+
+        // Load the Google Analytics client library.
+        gapi.client.load('analytics', 'v3').then(function() {
+          // Get a list of all Google Analytics accounts for this user
+          gapi.client.analytics.management.accounts.list().then(handleAccounts);
+        });
+      }
+
+      function handleAccounts(response) {
+        // Handles the response from the accounts list method.
+        if (response.result.items && response.result.items.length) {
+          // Get the first Google Analytics account.
+          console.log(response.result.items);
+          var firstAccountId = response.result.items[0].id;
+
+          // Query for properties.
+          queryProperties(firstAccountId);
+        } else {
+          console.log('No accounts found for this user.');
+        }
+      }
+
+      function queryProperties(accountId) {
+        // Get a list of all the properties for the account.
+        gapi.client.analytics.management.webproperties.list(
+            {'accountId': accountId})
+          .then(handleProperties)
+          .then(null, function(err) {
+            // Log any errors.
+            console.log(err);
+        });
+      }
+
+      function handleProperties(response) {
+        // Handles the response from the webproperties list method.
+        if (response.result.items && response.result.items.length) {
+
+          // Get the first Google Analytics account
+          var firstAccountId = response.result.items[0].accountId;
+
+          // Get the first property ID
+          var firstPropertyId = response.result.items[0].id;
+
+          // Query for Views (Profiles).
+          queryProfiles(firstAccountId, firstPropertyId);
+        } else {
+          console.log('No properties found for this user.');
+        }
+      }
+
+      function queryProfiles(accountId, propertyId) {
+        // Get a list of all Views (Profiles) for the first property
+        // of the first Account.
+        gapi.client.analytics.management.profiles.list({
+            'accountId': accountId,
+            'webPropertyId': propertyId
+        })
+        .then(handleProfiles)
+        .then(null, function(err) {
+            // Log any errors.
+            console.log(err);
+        });
+      }
+
+      function handleProfiles(response) {
+        // Handles the response from the profiles list method.
+        if (response.result.items && response.result.items.length) {
+          // Get the first View (Profile) ID.
+          var firstProfileId = response.result.items[0].id;
+
+          // Query the Core Reporting API.
+          queryCoreReportingApi(firstProfileId);
+        } else {
+          console.log('No views (profiles) found for this user.');
+        }
+      }
+
+
+      function queryCoreReportingApi(profileId) {
+        // Query the Core Reporting API for the number sessions for
+        // the past seven days.
+        gapi.client.analytics.data.ga.get({
+          'ids': 'ga:' + profileId,
+          'start-date': '7daysAgo',
+          'end-date': 'today',
+          'metrics': 'ga:sessions'
+        })
+        .then(function(response) {
+          var formattedJson = JSON.stringify(response.result, null, 2);
+          document.getElementById('query-output').value = formattedJson;
+        })
+        .then(null, function(err) {
+            // Log any errors.
+            console.log(err);
+        });
+      }
+
+
+    </script>
+    <script async defer src="https://apis.google.com/js/api.js"
+      onload="this.onload=function(){};handleClientLoad()"
+      onreadystatechange="if (this.readyState === 'complete') this.onload()">
+    </script>
+  </body>
+</html>
